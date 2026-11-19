@@ -169,6 +169,7 @@ def get_synthmanip_training_data(
     state_spec: Optional[dict] = None,
     state_indices: Optional[dict] = None,
     max_exo_views: int = 1,
+    path_validator=None,
 ) -> Optional[Dict[str, float]]:
     """Build training data mixture for SynthManip-format dataset.
 
@@ -189,7 +190,7 @@ def get_synthmanip_training_data(
 
     # Validate all data paths first
     for data_path in data_paths:
-        validate_data_path(data_path, require_val=require_val)
+        (path_validator or validate_data_path)(data_path, require_val=require_val)
 
     weight_config = None
     if weighted_sampling:

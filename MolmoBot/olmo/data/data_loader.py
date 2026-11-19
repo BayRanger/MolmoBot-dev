@@ -67,6 +67,12 @@ class DatasetWithArgs(BaseConfig):
 class DataLoaderConfig(BaseConfig):
     """Configuration for a torch `DataLoader`"""
 
+    dataset_backend: str = "native"
+    """Use native datasets or the opt-in lerobot-lancedb adapter."""
+
+    def _get_dataset(self, name, split):
+        return get_dataset_by_name(name, split, backend=self.dataset_backend)
+
     dataset: Optional[str] = None
     """Dataset name, will be used for `get_dataset_by_name`"""
 
@@ -130,7 +136,7 @@ class DataLoaderConfig(BaseConfig):
         if include_metadata is None:
             include_metadata = for_inference
 
-        dataset = get_dataset_by_name(self.dataset, self.split)
+        dataset = self._get_dataset(self.dataset, self.split)
         n_pad = 0
         if mesh is not None:
             dp_process_group = get_dp_process_group(mesh)
@@ -222,7 +228,7 @@ class DataLoaderConfig(BaseConfig):
             for_inference=False, is_training=True,
             text_seq_len=self.max_text_seq_len, max_seq_len=self.sequence_length)
         if self.dataset:
-            ds = get_dataset_by_name(self.dataset, self.split)
+            ds = self._get_dataset(self.dataset, self.split)
             datasets = [DeterministicDataset(ds, preprocessor, self.seed)]
             rates = [1]
         else:
@@ -234,7 +240,7 @@ class DataLoaderConfig(BaseConfig):
                     for task in group.datasets:
                         t0 = time.perf_counter()
                         log.info(f"Loading train dataset {task.dataset_name}/{self.split}")
-                        dataset = get_dataset_by_name(task.dataset_name, self.split)
+                        dataset = self._get_dataset(task.dataset_name, self.split)
                         delta = time.perf_counter() - t0
                         if delta > 1:
                             log.info(f"Dataset {task.dataset_name}/{self.split} took {delta:0.1f} seconds")
@@ -255,13 +261,13 @@ class DataLoaderConfig(BaseConfig):
             elif self.mixture:
                 for name, rate in self.mixture.items():
                     log.info(f"Loading train dataset {name}/{self.split}")
-                    mixture[name] = (get_dataset_by_name(name, self.split), rate, None)
+                    mixture[name] = (self._get_dataset(name, self.split), rate, None)
             else:
                 for root_size_mixture in self.root_size_mixture:
                     group_datasets = {}
                     for name, as_size in root_size_mixture.mixture.items():
                         log.info(f"Loading train dataset {name}/{self.split}")
-                        dataset = get_dataset_by_name(name, self.split)
+                        dataset = self._get_dataset(name, self.split)
                         if as_size is None:
                             size = len(dataset)
                         elif as_size <= 1:
@@ -327,7 +333,14 @@ class DataLoaderConfig(BaseConfig):
         output_shape_str = ", ".join(f"{k}={v.shape}" for k, v in output_shapes.items())
         log.info(f"Building train dataset with output shapes: {output_shape_str}")
         collator = model_config.build_collator(output_shapes, self.pad, include_metadata=False)
-        dataset = IterableDatasetMixture(
+        if self.dataset_backend == "lerobot_lance":
+            from olmo.data.lerobot_lance_dataset import BatchedLanceMixture
+            if self.packing is not None or not self.shuffle:
+                raise ValueError("Lance training requires packing=None and shuffle=True")
+            mixture_class = BatchedLanceMixture
+        else:
+            mixture_class = IterableDatasetMixture
+        dataset = mixture_class(
             start_index=self.start_index,
             datasets=datasets,
             mixture_rates=rates,
@@ -337,6 +350,10 @@ class DataLoaderConfig(BaseConfig):
             shuffle=self.shuffle,
             packer=packer
         )
+        worker_options = {}
+        if self.dataset_backend == "lerobot_lance" and self.num_workers > 0:
+            from lerobot_lancedb import lance_mp_context
+            worker_options["multiprocessing_context"] = lance_mp_context()
         return DataLoader(
             dataset,
             batch_size=dataset.device_batch_size,
@@ -348,5 +365,6 @@ class DataLoaderConfig(BaseConfig):
             prefetch_factor=None if self.num_workers == 0 else self.prefetch_factor,
             persistent_workers=self.persistent_workers,
             timeout=self.timeout,
+            **worker_options,
         )
 

@@ -1,3 +1,5 @@
+>  This repo trains through the external lerobot-lancedb reader. 
+
 <div align="center">
   <img src="assets/MolmoBot.png" alt="MolmoSpaces Logo" width="800" style="margin-left:'auto' margin-right:'auto' display:'block'"/></br>
   Large-Scale Simulation Enables Zero-Shot Manipulation
@@ -88,3 +90,16 @@ python calculate_stats.py RBY1PickAndPlaceDataGenConfig/part0/train --keys actio
       url={https://arxiv.org/abs/2603.16861},
 }
 ```
+
+
+## direct lerobot-lancedb integration
+
+This branch directly depends on `lerobot-lancedb` and does not require MXI for
+training. Select `--data_backend=lerobot_lance` and pass a standard LeRobot v3
+Lance product root as `--data_paths`. No scope or custom manifest is required.
+The default native HDF5 backend is unchanged.
+
+The external dependency provides table and video I/O. MolmoBot retains only its
+model sample conversion, normalization and batch-sampling contract. No low-level
+reader is vendored into this branch. Installation and supported settings are in
+[the Lance training guide](MolmoBot/README-lance.md).

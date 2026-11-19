@@ -255,7 +255,14 @@ def main():
     parser.add_argument("--max_exo_views", type=int, default=1, help="Maximum number of exo views per frame (default: 1)")
     parser.add_argument("--exp_name", type=str, default="molmobot_training", help="Unique experiment name.")
 
+    parser.add_argument("--data_backend", choices=["native", "lerobot_lance"], default="native",
+                        help="opt in to the external lerobot-lancedb reader")
+
     args, other_args = parser.parse_known_args()
+    if args.data_backend == "lerobot_lance":
+        from olmo.data.lerobot_lance_dataset import validate_training_args, validate_data_path as validate_lance_data_path
+        validate_training_args(args)
+
 
     # Handle action preset
     action_spec_from_preset = None
@@ -457,6 +464,7 @@ def main():
         max_points_in_conditioning_frame=args.max_points_in_conditioning_frame,
         use_point_prompts_per_dataset=[bool(x) for x in args.use_point_prompts_per_dataset] if args.use_point_prompts_per_dataset else None,
         require_val=not has_separate_val_paths and not args.no_val,
+        path_validator=validate_lance_data_path if args.data_backend == "lerobot_lance" else None,
         state_spec=state_spec,
         state_indices=state_indices,
         max_exo_views=args.max_exo_views,
@@ -544,6 +552,7 @@ def main():
         model=model_cfg,
         save_overwrite=True,
         data=DataLoaderConfig(
+            dataset_backend=args.data_backend,
             mixture=action_mixture,
             shuffle=True,
             split="train",

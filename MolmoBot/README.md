@@ -31,6 +31,8 @@ cd <code_path>/MolmoBot/MolmoBot
 uv sync --extra eval
 ```
 
+For LeRobot v3 Lance products, see [Train MolmoBot on Lance data](README-lance.md).
+
 # Franka Static Manipulation
 
 ## Running the Franka Policy
